@@ -1,8 +1,11 @@
 package com.schmitztech.hadoop
 
 import java.io.File
+import org.apache.commons.io.FileUtils
 
 class DiskBalancer(directories: Seq[DataDirectory]) {
+  require(!directories.isEmpty)
+
   val rand = new java.util.Random
 
   def status: String = 
@@ -15,7 +18,7 @@ class DiskBalancer(directories: Seq[DataDirectory]) {
 
   // variance in GB
   def variance(): Double = {
-    val sizes = directories.map(_.freeSpaceOnDisk / 1024 / 1024 / 1024)
+    val sizes = directories.map(_.freeSpaceOnDisk.toDouble / 1024.toDouble)
     val mean = sizes.sum.toDouble / sizes.size.toDouble
 
     sizes.map { size => 
@@ -34,38 +37,32 @@ class DiskBalancer(directories: Seq[DataDirectory]) {
     val randomBlockIndex = rand.nextInt(blocks.size)
     val randomBlock = blocks(randomBlockIndex)
 
-    move(randomBlock, emptiest)
+    fullest.move(randomBlock, emptiest)
 
     val finalVariance = variance()
+
+    println(initialVariance + " -> " + finalVariance)
 
     finalVariance < initialVariance
   }
 
   def run() {
+    val br = new java.io.BufferedReader(new java.io.InputStreamReader(System.in))
     while (step()) {
+      println(status)
+      println(variance)
     }
-  }
-
-  def move(block: Block, directory: DataDirectory) {
-    val dest = {
-      val path = block.blockFile.getParentFile.getPath
-      val suffix = path.drop(path.indexOf("current"))
-      val prefix = directory.file.getPath.take(path.indexOf("current"))
-      prefix + "/" + suffix
-    }
-
-    println(s"Move '${block.blockFile.getPath}' to '$dest'...")
-    // FileUtils.moveFileToDirectory(block.blockFile, dest)
-    // FileUtils.moveFileToDirectory(block.metaFile, dest)
   }
 }
 
 object DiskBalancerMain extends App {
   val disks = args
 
+  println("Creating balancer...")
   val balancer = new DiskBalancer(disks.map(path => DataDirectory(new File(path))))
   println(balancer.status)
   println(balancer.variance)
 
-  balancer.step()
+  println("Running program...")
+  balancer.run()
 }
